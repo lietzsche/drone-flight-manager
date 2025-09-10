@@ -1,0 +1,40 @@
+﻿# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Root env/logs
+.env
+.env.*
+*.log
+
+# IDE/Editor
+.vscode/
+.idea/
+*.iml
+
+# Node / Vite (front)
+node_modules/
+front/node_modules/
+front/dist/
+front/.vite/
+front/.env
+front/.env.*
+
+# TypeScript
+*.tsbuildinfo
+
+# Java / Gradle (back)
+back/.gradle/
+back/build/
+back/out/
+back/*.iml
+
+# Coverage / reports
+coverage/
+*.lcov
+
+# Misc
+*.swp
+*.tmp
+*.bak

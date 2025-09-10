@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-gray-100 text-gray-900;
+}
+
+.main-container {
+  @apply max-w-md mx-auto mt-10 p-6 bg-white rounded shadow;
+}
+
+.form-field {
+  @apply border rounded p-2 w-full;
+}
+
+.button-primary {
+  @apply bg-blue-600 text-white rounded p-2 hover:bg-blue-700;
+}
+
+.link {
+  @apply text-blue-500 hover:underline;
+}
