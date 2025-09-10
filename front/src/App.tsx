@@ -6,6 +6,7 @@ import BoardListPage from './pages/BoardListPage'
 import BoardDetailPage from './pages/BoardDetailPage'
 import BoardCreatePage from './pages/BoardCreatePage'
 import Navbar from './components/Navbar'
+import SchedulePage from './pages/SchedulePage'
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
         <Route path="/boards" element={<BoardListPage />} />
         <Route path="/boards/new" element={<BoardCreatePage />} />
         <Route path="/boards/:id" element={<BoardDetailPage />} />
+        <Route path="/schedules" element={<SchedulePage />} />
       </Routes>
     </>
   )

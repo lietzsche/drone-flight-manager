@@ -1,4 +1,16 @@
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || ''
+// Resolve API base URL: in dev, prefer proxy ('') unless explicitly set
+export const BASE_URL = (() => {
+  const envBase = (import.meta.env.VITE_API_BASE_URL as string | undefined) || ''
+  if (!envBase) return ''
+  try {
+    const u = new URL(envBase)
+    // If someone mistakenly points to the dev server (5173), fall back to proxy
+    if (u.port === '5173') return ''
+  } catch {
+    // ignore invalid URL, use as-is
+  }
+  return envBase
+})()
 
 export interface Post {
   id: number
@@ -16,9 +28,11 @@ export interface Comment {
   createdAt: string
 }
 
-function authHeaders() {
-  const token = localStorage.getItem('token')
-  return token ? { Authorization: `Bearer ${token}` } : {}
+function authHeaders(): Record<string, string> {
+  const token = localStorage.getItem("token");
+  const h: Record<string, string> = {};
+  if (token) h.Authorization = `Bearer ${token}`;
+  return h;
 }
 
 export async function getPosts(): Promise<Post[]> {
@@ -139,4 +153,104 @@ export async function addReply(
 
 export function isLoggedIn(): boolean {
   return !!localStorage.getItem('token')
+}
+
+// Schedules
+export type ScheduleStatus = 'PLANNED' | 'CONFIRMED' | 'CANCELLED'
+
+export interface FlightSchedule {
+  id: number
+  ownerId: number
+  title: string
+  description?: string
+  startsAt: string
+  endsAt: string
+  locationName?: string
+  lat?: number
+  lng?: number
+  status: ScheduleStatus
+}
+
+export interface Page<T> {
+  content: T[]
+  totalElements: number
+  totalPages: number
+  size: number
+  number: number
+}
+
+export async function getSchedules(params: {
+  from: string
+  to: string
+  page?: number
+  size?: number
+}): Promise<Page<FlightSchedule>> {
+  const qs = new URLSearchParams({ from: params.from, to: params.to })
+  if (params.page != null) qs.set('page', String(params.page))
+  if (params.size != null) qs.set('size', String(params.size))
+  const res = await fetch(`${BASE_URL}/api/schedules?${qs.toString()}`, { headers: { ...authHeaders() } })
+  if (res.status === 400) {
+    const data = await res.json().catch(() => ({} as any))
+    throw new Error((data as any).message || 'Invalid date range')
+  }
+  if (res.status === 401) throw new Error('Login required')
+  if (!res.ok) throw new Error('Failed to fetch schedules')
+  return res.json()
+}
+
+export async function createSchedule(payload: Omit<FlightSchedule, 'id' | 'ownerId'>): Promise<FlightSchedule> {
+  const res = await fetch(`${BASE_URL}/api/schedules`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  })
+  if (res.status === 400) {
+    const data = await res.json().catch(() => ({} as any))
+    throw new Error((data as any).message || 'Validation failed')
+  }
+  if (res.status === 401) throw new Error('Login required')
+  if (!res.ok) throw new Error('Failed to create schedule')
+  return res.json()
+}
+
+export async function updateSchedule(id: number, payload: Partial<Omit<FlightSchedule, 'id' | 'ownerId'>>): Promise<FlightSchedule> {
+  const res = await fetch(`${BASE_URL}/api/schedules/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  })
+  if (res.status === 400) {
+    const data = await res.json().catch(() => ({} as any))
+    throw new Error((data as any).message || 'Validation failed')
+  }
+  if (res.status === 401) throw new Error('Login required')
+  if (res.status === 403) throw new Error('No permission')
+  if (res.status === 404) throw new Error('Schedule not found')
+  if (!res.ok) throw new Error('Failed to update schedule')
+  return res.json()
+}
+
+export async function updateScheduleStatus(id: number, status: ScheduleStatus): Promise<FlightSchedule> {
+  const res = await fetch(`${BASE_URL}/api/schedules/${id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ status }),
+  })
+  if (res.status === 400) {
+    const data = await res.json().catch(() => ({} as any))
+    throw new Error((data as any).message || 'Validation failed')
+  }
+  if (res.status === 401) throw new Error('Login required')
+  if (res.status === 403) throw new Error('No permission')
+  if (res.status === 404) throw new Error('Schedule not found')
+  if (!res.ok) throw new Error('Failed to update status')
+  return res.json()
+}
+
+export async function deleteSchedule(id: number): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/schedules/${id}`, { method: 'DELETE', headers: { ...authHeaders() } })
+  if (res.status === 401) throw new Error('Login required')
+  if (res.status === 403) throw new Error('No permission')
+  if (res.status === 404) throw new Error('Schedule not found')
+  if (!res.ok) throw new Error('Failed to delete schedule')
 }

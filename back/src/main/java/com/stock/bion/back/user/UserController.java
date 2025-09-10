@@ -32,6 +32,7 @@ public class UserController {
         user.setPassword(passwordEncoder.encode(request.password()));
         user.setEmail(request.email());
         user.setPhone(request.phone());
+        user.setRole(UserRole.USER);
         User saved = userRepository.save(user);
         saved.setPassword(null); // do not expose password
         return ResponseEntity.ok(saved);

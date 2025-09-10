@@ -9,7 +9,10 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     server: {
       proxy: {
-        '/api': apiBaseUrl,
+        '/api': {
+          target: apiBaseUrl,
+          changeOrigin: true,
+        },
       },
     },
   }

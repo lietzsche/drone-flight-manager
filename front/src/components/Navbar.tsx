@@ -23,6 +23,7 @@ function Navbar() {
         <div className="flex items-center gap-4">
           <Link to="/" className="font-semibold">Bion</Link>
           <Link to="/boards" className="link">Board</Link>
+          <Link to="/schedules" className="link">Schedules</Link>
         </div>
         <div className="flex items-center gap-3">
           {!authed ? (

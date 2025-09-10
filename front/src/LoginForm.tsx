@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { BASE_URL } from './api'
 
 function LoginForm() {
   const navigate = useNavigate()
@@ -10,7 +11,7 @@ function LoginForm() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/auth/login`, {
+      const res = await fetch(`${BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),

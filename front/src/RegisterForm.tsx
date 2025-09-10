@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { BASE_URL } from './api'
 
 function RegisterForm() {
   const navigate = useNavigate()
@@ -21,7 +22,7 @@ function RegisterForm() {
       return
     }
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/users/register`, {
+      const res = await fetch(`${BASE_URL}/api/users/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password, confirmPassword, email, phone }),
