@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom'
+﻿import { Routes, Route } from 'react-router-dom'
 import HomePage from './pages/HomePage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
@@ -7,6 +7,7 @@ import BoardDetailPage from './pages/BoardDetailPage'
 import BoardCreatePage from './pages/BoardCreatePage'
 import Navbar from './components/Navbar'
 import SchedulePage from './pages/SchedulePage'
+import FlightZonePage from './pages/FlightZonePage'
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
         <Route path="/boards/new" element={<BoardCreatePage />} />
         <Route path="/boards/:id" element={<BoardDetailPage />} />
         <Route path="/schedules" element={<SchedulePage />} />
+        <Route path="/flight-zones" element={<FlightZonePage />} />
       </Routes>
     </>
   )

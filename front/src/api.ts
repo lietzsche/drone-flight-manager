@@ -254,3 +254,86 @@ export async function deleteSchedule(id: number): Promise<void> {
   if (res.status === 404) throw new Error('Schedule not found')
   if (!res.ok) throw new Error('Failed to delete schedule')
 }
+
+export type FlightZoneType = 'PROHIBITED' | 'RESTRICTED' | 'CAUTION'
+
+export interface FlightZone {
+  id: number
+  name: string
+  type: FlightZoneType
+  altitudeLimit?: number | null
+  timeWindow?: string | null
+  geojson: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type FlightZonePayload = {
+  name?: string
+  type?: FlightZoneType
+  altitudeLimit?: number | null
+  timeWindow?: string | null
+  geojson?: string
+}
+
+export type CreateFlightZonePayload = FlightZonePayload & {
+  name: string
+  type: FlightZoneType
+  geojson: string
+}
+
+export async function getFlightZones(): Promise<FlightZone[]> {
+  const res = await fetch(`${BASE_URL}/api/flight-zones`, { headers: { ...authHeaders() } })
+  if (!res.ok) throw new Error('Failed to fetch flight zones')
+  return res.json()
+}
+
+export async function getFlightZone(id: number): Promise<FlightZone> {
+  const res = await fetch(`${BASE_URL}/api/flight-zones/${id}`, { headers: { ...authHeaders() } })
+  if (res.status === 404) throw new Error('Flight zone not found')
+  if (!res.ok) throw new Error('Failed to fetch flight zone')
+  return res.json()
+}
+
+export async function createFlightZone(
+  payload: CreateFlightZonePayload,
+): Promise<FlightZone> {
+  const res = await fetch(`${BASE_URL}/api/flight-zones`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  })
+  if (res.status === 400) {
+    const data = await res.json().catch(() => ({} as any))
+    throw new Error((data as any).message || 'Validation failed')
+  }
+  if (res.status === 401) throw new Error('Login required')
+  if (!res.ok) throw new Error('Failed to create flight zone')
+  return res.json()
+}
+
+export async function updateFlightZone(id: number, payload: FlightZonePayload): Promise<FlightZone> {
+  const res = await fetch(`${BASE_URL}/api/flight-zones/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  })
+  if (res.status === 400) {
+    const data = await res.json().catch(() => ({} as any))
+    throw new Error((data as any).message || 'Validation failed')
+  }
+  if (res.status === 401) throw new Error('Login required')
+  if (res.status === 404) throw new Error('Flight zone not found')
+  if (!res.ok) throw new Error('Failed to update flight zone')
+  return res.json()
+}
+
+export async function deleteFlightZone(id: number): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/flight-zones/${id}`, {
+    method: 'DELETE',
+    headers: { ...authHeaders() },
+  })
+  if (res.status === 401) throw new Error('Login required')
+  if (res.status === 404) throw new Error('Flight zone not found')
+  if (!res.ok) throw new Error('Failed to delete flight zone')
+}

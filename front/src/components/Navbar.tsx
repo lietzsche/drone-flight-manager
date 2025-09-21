@@ -1,4 +1,4 @@
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+﻿import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { isLoggedIn } from '../api'
 import { useEffect, useState } from 'react'
 
@@ -24,6 +24,7 @@ function Navbar() {
           <Link to="/" className="font-semibold">Bion</Link>
           <Link to="/boards" className="link">Board</Link>
           <Link to="/schedules" className="link">Schedules</Link>
+          <Link to="/flight-zones" className="link">Flight Zones</Link>
         </div>
         <div className="flex items-center gap-3">
           {!authed ? (
@@ -41,4 +42,3 @@ function Navbar() {
 }
 
 export default Navbar
-
