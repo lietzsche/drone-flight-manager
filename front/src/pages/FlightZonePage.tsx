@@ -6,7 +6,7 @@ import L, {
   type FeatureGroup,
   type LeafletEventHandlerFn,
 } from 'leaflet';
-import type { GeoJsonObject } from 'geojson';
+import type { GeoJsonObject, Polygon as GeoJsonPolygon } from 'geojson';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-draw';
 import 'leaflet-draw/dist/leaflet.draw.css';
@@ -49,18 +49,151 @@ const initialForm: FormState = {
   geojson: '',
 };
 
+type SimplePoint = [number, number];
+
+const GEOMETRY_EPSILON = 1e-10;
+
+function toPolygonGeometry(data: unknown): GeoJsonPolygon | null {
+  if (!data || typeof data !== 'object') return null;
+  const typed = data as { type?: string; geometry?: unknown; coordinates?: unknown };
+  if (typed.type === 'Feature') {
+    return toPolygonGeometry(typed.geometry);
+  }
+  if (typed.type === 'Polygon' && Array.isArray(typed.coordinates)) {
+    return typed as GeoJsonPolygon;
+  }
+  return null;
+}
+
+function parsePolygonGeojson(value: string): GeoJsonPolygon | null {
+  try {
+    const parsed = JSON.parse(value) as GeoJsonObject;
+    return toPolygonGeometry(parsed);
+  } catch {
+    return null;
+  }
+}
+
+function pointsEqual(a: SimplePoint, b: SimplePoint): boolean {
+  return Math.abs(a[0] - b[0]) < GEOMETRY_EPSILON && Math.abs(a[1] - b[1]) < GEOMETRY_EPSILON;
+}
+
+function onSegment(p: SimplePoint, q: SimplePoint, r: SimplePoint): boolean {
+  return (
+    q[0] <= Math.max(p[0], r[0]) + GEOMETRY_EPSILON &&
+    q[0] >= Math.min(p[0], r[0]) - GEOMETRY_EPSILON &&
+    q[1] <= Math.max(p[1], r[1]) + GEOMETRY_EPSILON &&
+    q[1] >= Math.min(p[1], r[1]) - GEOMETRY_EPSILON
+  );
+}
+
+function orientation(p: SimplePoint, q: SimplePoint, r: SimplePoint): number {
+  const value = (q[1] - p[1]) * (r[0] - q[0]) - (q[0] - p[0]) * (r[1] - q[1]);
+  if (Math.abs(value) < GEOMETRY_EPSILON) return 0;
+  return value > 0 ? 1 : 2;
+}
+
+function segmentsIntersect(p1: SimplePoint, p2: SimplePoint, q1: SimplePoint, q2: SimplePoint): boolean {
+  const o1 = orientation(p1, p2, q1);
+  const o2 = orientation(p1, p2, q2);
+  const o3 = orientation(q1, q2, p1);
+  const o4 = orientation(q1, q2, p2);
+
+  if (o1 !== o2 && o3 !== o4) return true;
+  if (o1 === 0 && onSegment(p1, q1, p2)) return true;
+  if (o2 === 0 && onSegment(p1, q2, p2)) return true;
+  if (o3 === 0 && onSegment(q1, p1, q2)) return true;
+  if (o4 === 0 && onSegment(q1, p2, q2)) return true;
+  return false;
+}
+
+function polygonArea(points: SimplePoint[]): number {
+  let area = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const [x1, y1] = points[index];
+    const [x2, y2] = points[(index + 1) % points.length];
+    area += x1 * y2 - x2 * y1;
+  }
+  return Math.abs(area) * 0.5;
+}
+
+function normalizeRing(rawRing: unknown[]): SimplePoint[] | null {
+  const points: SimplePoint[] = [];
+  for (const rawPoint of rawRing) {
+    if (!Array.isArray(rawPoint) || rawPoint.length < 2) return null;
+    const lng = rawPoint[0];
+    const lat = rawPoint[1];
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+    points.push([lng, lat]);
+  }
+
+  if (points.length < 3) return null;
+
+  if (pointsEqual(points[0], points[points.length - 1])) {
+    points.pop();
+  }
+
+  if (points.length < 3) return null;
+
+  for (let index = 0; index < points.length; index += 1) {
+    const next = points[(index + 1) % points.length];
+    if (pointsEqual(points[index], next)) {
+      return null;
+    }
+  }
+
+  for (let i = 0; i < points.length; i += 1) {
+    for (let j = i + 1; j < points.length; j += 1) {
+      if (pointsEqual(points[i], points[j])) {
+        return null;
+      }
+    }
+  }
+
+  return points;
+}
+
+function isSimplePolygon(geometry: GeoJsonPolygon): boolean {
+  const ring = geometry.coordinates?.[0];
+  if (!Array.isArray(ring)) return false;
+
+  const points = normalizeRing(ring);
+  if (!points || points.length < 3) return false;
+
+  if (polygonArea(points) < GEOMETRY_EPSILON) {
+    return false;
+  }
+
+  const segmentCount = points.length;
+  for (let i = 0; i < segmentCount; i += 1) {
+    const a1 = points[i];
+    const a2 = points[(i + 1) % segmentCount];
+    for (let j = i + 1; j < segmentCount; j += 1) {
+      if (Math.abs(i - j) <= 1) continue;
+      if (i === 0 && j === segmentCount - 1) continue;
+      const b1 = points[j];
+      const b2 = points[(j + 1) % segmentCount];
+      if (segmentsIntersect(a1, a2, b1, b2)) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+function extractPolygonGeometry(layer: L.Layer): GeoJsonPolygon | null {
+  const raw = (layer as any).toGeoJSON() as GeoJsonObject | undefined;
+  if (!raw) return null;
+  return toPolygonGeometry(raw);
+}
+
 function MapReady({ onReady }: { onReady: (map: LeafletMap) => void }) {
   const map = useMap();
   useEffect(() => {
     onReady(map);
   }, [map, onReady]);
   return null;
-}
-
-function extractPolygonGeometry(layer: L.Layer): GeoJsonObject {
-  const raw = (layer as any).toGeoJSON();
-  if (!raw) return { type: 'Polygon', coordinates: [] } as GeoJsonObject;
-  return raw.type === 'Feature' ? raw.geometry : raw;
 }
 
 function disableActiveDraw(drawControl: L.Control.Draw | null) {
@@ -137,15 +270,14 @@ export default function FlightZonePage() {
     () =>
       zones
         .map((zone) => {
-          try {
-            const feature = JSON.parse(zone.geojson) as GeoJsonObject;
-            return { zone, feature };
-          } catch (err) {
-            console.warn('Invalid geojson for zone', zone.id, err);
+          const feature = parsePolygonGeojson(zone.geojson);
+          if (!feature) {
+            console.warn('Invalid polygon geojson for zone', zone.id);
             return null;
           }
+          return { zone, feature };
         })
-        .filter((entry): entry is { zone: FlightZone; feature: GeoJsonObject } => entry !== null),
+        .filter((entry): entry is { zone: FlightZone; feature: GeoJsonPolygon } => entry !== null),
     [zones],
   );
 
@@ -223,31 +355,30 @@ export default function FlightZonePage() {
     if (!drawnGroup || !map) return false;
     drawnGroup.clearLayers();
     if (!value) return true;
-    try {
-      const parsed = JSON.parse(value) as GeoJsonObject;
-      const styled = L.geoJSON(parsed as any, {
-        style: {
-          color: '#2563eb',
-          weight: 2,
-          fillOpacity: 0.2,
-        },
-      });
-      styled.eachLayer((layer) => {
-        drawnGroup.addLayer(layer);
-        if ((layer as any).editing && typeof (layer as any).editing.enable === 'function') {
-          (layer as any).editing.enable();
-        }
-      });
-      const bounds = drawnGroup.getBounds();
-      if (bounds.isValid() && (options?.fitBounds ?? true)) {
-        map.fitBounds(bounds, { padding: [24, 24] });
-      }
-      return true;
-    } catch (err) {
-      console.warn('Invalid GeoJSON string supplied to map', err);
+    const geometry = parsePolygonGeojson(value);
+    if (!geometry) {
+      console.warn('Invalid polygon GeoJSON string supplied to map');
       drawnGroup.clearLayers();
       return false;
     }
+    const styled = L.geoJSON(geometry as GeoJsonObject, {
+      style: {
+        color: '#2563eb',
+        weight: 2,
+        fillOpacity: 0.2,
+      },
+    });
+    styled.eachLayer((layer) => {
+      drawnGroup.addLayer(layer);
+      if ((layer as any).editing && typeof (layer as any).editing.enable === 'function') {
+        (layer as any).editing.enable();
+      }
+    });
+    const bounds = drawnGroup.getBounds();
+    if (bounds.isValid() && (options?.fitBounds ?? true)) {
+      map.fitBounds(bounds, { padding: [24, 24] });
+    }
+    return true;
   }, []);
 
   const toggleType = (type: FlightZoneType) => {
@@ -275,12 +406,16 @@ export default function FlightZonePage() {
 
   const openEditForm = useCallback(
     (zone: FlightZone) => {
-      let prettyGeo = zone.geojson;
-      try {
-        prettyGeo = JSON.stringify(JSON.parse(zone.geojson), null, 2);
-      } catch (err) {
-        console.warn('Failed to pretty-print geojson', err);
+      const geometry = parsePolygonGeojson(zone.geojson);
+      const prettyGeo = geometry ? JSON.stringify(geometry, null, 2) : zone.geojson;
+      if (!geometry) {
+        console.warn('Failed to parse polygon geojson for zone', zone.id);
       }
+      const initialError = !geometry
+        ? '저장된 폴리곤 데이터를 불러오지 못했습니다. 지도에서 다시 그려 주세요.'
+        : isSimplePolygon(geometry)
+          ? null
+          : '다각형 선들이 서로 교차하지 않도록 수정해 주세요.';
       setFormMode('edit');
       setForm({
         name: zone.name,
@@ -290,7 +425,7 @@ export default function FlightZonePage() {
         geojson: prettyGeo,
       });
       setFormTargetId(zone.id);
-      setFormError(null);
+      setFormError(initialError);
       loadPolygonToMap(prettyGeo, { fitBounds: true });
       stopPolygonDrawing();
     },
@@ -321,11 +456,21 @@ export default function FlightZonePage() {
       return;
     }
     if (!geojsonValue) {
-      setFormError('GeoJSON 정보를 입력하거나 지도에 폴리곤을 그려 주세요.');
+      setFormError('지도에서 폴리곤을 그려 주세요.');
       return;
     }
     if (altitudeLimit !== undefined && Number.isNaN(altitudeLimit)) {
       setFormError('고도 제한은 숫자여야 합니다.');
+      return;
+    }
+
+    const geometry = parsePolygonGeojson(geojsonValue);
+    if (!geometry) {
+      setFormError('그린 영역 정보를 불러올 수 없습니다. 지도를 다시 그려 주세요.');
+      return;
+    }
+    if (!isSimplePolygon(geometry)) {
+      setFormError('다각형 선들이 서로 교차하지 않도록 수정해 주세요.');
       return;
     }
 
@@ -334,7 +479,7 @@ export default function FlightZonePage() {
       type: form.type,
       altitudeLimit,
       timeWindow: timeValue === '' ? undefined : timeValue,
-      geojson: geojsonValue,
+      geojson: JSON.stringify(geometry),
     };
 
     try {
@@ -362,21 +507,18 @@ export default function FlightZonePage() {
     }
   };
 
-  const handleGeojsonBlur = () => {
-    if (!formMode) return;
-    const ok = loadPolygonToMap(form.geojson, { fitBounds: false });
-    if (!ok && form.geojson.trim()) {
-      setFormError('GeoJSON 형식이 올바르지 않습니다.');
-    } else {
-      setFormError(null);
-    }
-  };
-
   const handleDrawCreated = useCallback(
     (event: L.DrawEvents.Created) => {
-      const geometry = extractPolygonGeometry(event.layer);
       const drawnGroup = drawnLayerRef.current;
       if (!drawnGroup) return;
+
+      const geometry = extractPolygonGeometry(event.layer);
+      if (!geometry) {
+        setForm((prev) => ({ ...prev, geojson: '' }));
+        setFormError('폴리곤 정보를 읽을 수 없습니다. 다시 시도해 주세요.');
+        stopPolygonDrawing();
+        return;
+      }
 
       drawnGroup.clearLayers();
       drawnGroup.addLayer(event.layer);
@@ -384,18 +526,22 @@ export default function FlightZonePage() {
         (event.layer as any).editing.enable();
       }
 
+      const pretty = JSON.stringify(geometry, null, 2);
+      const simpleError = isSimplePolygon(geometry)
+        ? null
+        : '다각형 선들이 서로 교차하지 않도록 수정해 주세요.';
+
       if (!formModeRef.current) {
         setFormMode('new');
         setFormTargetId(null);
-        setFormError(null);
         setForm({
           ...initialForm,
-          geojson: JSON.stringify(geometry, null, 2),
+          geojson: pretty,
         });
       } else {
-        setForm((prev) => ({ ...prev, geojson: JSON.stringify(geometry, null, 2) }));
+        setForm((prev) => ({ ...prev, geojson: pretty }));
       }
-      setFormError(null);
+      setFormError(simpleError);
       stopPolygonDrawing();
     },
     [stopPolygonDrawing],
@@ -407,8 +553,14 @@ export default function FlightZonePage() {
       const layers = event.layers.getLayers();
       if (layers.length === 0) return;
       const geometry = extractPolygonGeometry(layers[0] as L.Layer);
+      if (!geometry) {
+        setFormError('편집한 폴리곤을 읽을 수 없습니다. 다시 시도해 주세요.');
+        return;
+      }
       setForm((prev) => ({ ...prev, geojson: JSON.stringify(geometry, null, 2) }));
-      setFormError(null);
+      setFormError(
+        isSimplePolygon(geometry) ? null : '다각형 선들이 서로 교차하지 않도록 수정해 주세요.',
+      );
     },
     [],
   );
@@ -418,6 +570,7 @@ export default function FlightZonePage() {
       if (!formModeRef.current) return;
       clearDrawnLayers();
       setForm((prev) => ({ ...prev, geojson: '' }));
+      setFormError('지도에서 폴리곤을 다시 그려 주세요.');
     },
     [clearDrawnLayers],
   );
@@ -484,7 +637,7 @@ export default function FlightZonePage() {
         const drawControl = new L.Control.Draw({
           draw: {
             polygon: {
-              allowIntersection: false,
+              allowIntersection: true,
               showArea: true,
               shapeOptions: {
                 color: '#2563eb',
@@ -730,19 +883,8 @@ export default function FlightZonePage() {
                   />
                 </div>
               </div>
-              <div>
-                <div className="flex items-center justify-between">
-                  <label className="text-sm text-gray-600">GeoJSON (Polygon)</label>
-                  <span className="text-[11px] text-gray-500">지도에 그리면 자동으로 채워집니다.</span>
-                </div>
-                <textarea
-                  className="border rounded w-full px-3 py-2 h-40 font-mono text-xs"
-                  value={form.geojson}
-                  onChange={(event) => setForm((prev) => ({ ...prev, geojson: event.target.value }))}
-                  onBlur={handleGeojsonBlur}
-                  placeholder='{ "type": "Polygon", "coordinates": [...] }'
-                  required
-                />
+              <div className="rounded border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+                지도를 클릭해 영역을 그리고 마지막 꼭짓점에서 더블 클릭하면 그리기가 완료됩니다. 표시된 점을 드래그해서 언제든지 모양을 조정할 수 있어요.
               </div>
               {formError && <p className="text-sm text-red-600">{formError}</p>}
               <div className="flex justify-end gap-2 pt-2">
