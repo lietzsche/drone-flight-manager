@@ -1,11 +1,13 @@
 ﻿import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { isLoggedIn } from '../api'
 import { useEffect, useState } from 'react'
+import FlightAreaPanel from './FlightAreaPanel'
 
 function Navbar() {
   const navigate = useNavigate()
   const location = useLocation()
   const [authed, setAuthed] = useState(isLoggedIn())
+  const [showPanel, setShowPanel] = useState(false)
 
   useEffect(() => {
     setAuthed(isLoggedIn())
@@ -25,6 +27,7 @@ function Navbar() {
           <Link to="/boards" className="link">Board</Link>
           <Link to="/schedules" className="link">Schedules</Link>
           <Link to="/flight-zones" className="link">Flight Zones</Link>
+          <button onClick={() => setShowPanel((s) => !s)} className="link text-left">비행 가능지역 확인</button>
         </div>
         <div className="flex items-center gap-3">
           {!authed ? (
@@ -37,6 +40,7 @@ function Navbar() {
           )}
         </div>
       </div>
+      {showPanel && <FlightAreaPanel onClose={() => setShowPanel(false)} />}
     </nav>
   )
 }
